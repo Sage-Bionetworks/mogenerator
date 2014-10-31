@@ -599,6 +599,14 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     return NO;
 }
 
+- (BOOL)hasDateAttributeType {
+  return ([self attributeType] == NSDateAttributeType);
+}
+
+- (BOOL)hasBinaryDataAttributeType {
+  return ([self attributeType] == NSBinaryDataAttributeType);
+}
+
 @end
 
 @implementation NSRelationshipDescription (collectionClassName)

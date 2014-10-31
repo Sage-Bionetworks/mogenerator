@@ -42,6 +42,8 @@
 - (NSString*)objectAttributeType;
 - (BOOL)hasTransformableAttributeType;
 - (BOOL)isReadonly;
+- (BOOL)hasDateAttributeType;
+- (BOOL)hasBinaryDataAttributeType;
 @end
 
 @interface NSRelationshipDescription (collectionClassName)
