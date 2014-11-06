@@ -12,6 +12,7 @@ static NSString * const kTemplateVar = @"TemplateVar";
 static NSString  *gCustomBaseClass;
 static NSString  *gCustomBaseClassImport;
 static NSString  *gCustomBaseClassForced;
+static NSString  *gPonsoPrefix;
 static BOOL       gSwift;
 
 static const NSString *const kAttributeValueScalarTypeKey = @"attributeValueScalarType";
@@ -117,7 +118,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
 
     for (NSEntityDescription *entity in allEntities)
     {
-        NSString *entityClassName = [entity managedObjectClassName];
+        NSString *entityClassName = entity.generatedObjectClassName;
 
         if ([entity hasCustomClass]){
             [result addObject:entity];
@@ -129,7 +130,14 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
         }
     }
 
-    return [result sortedArrayUsingDescriptors:[NSArray arrayWithObject:[[[NSSortDescriptor alloc] initWithKey:@"managedObjectClassName"
+    NSString *sortKey;
+    if (gPonsoPrefix) {
+        sortKey = @"name";
+    } else {
+        sortKey = @"managedObjectClassName";
+    }
+
+    return [result sortedArrayUsingDescriptors:[NSArray arrayWithObject:[[[NSSortDescriptor alloc] initWithKey:sortKey
                                                                                                      ascending:YES] autorelease]]];
 }
 @end
@@ -144,7 +152,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
 }
 
 - (BOOL)hasCustomClass {
-    NSString *entityClassName = [self managedObjectClassName];
+    NSString *entityClassName = self.generatedObjectClassName;
     BOOL result = !([entityClassName isEqualToString:@"NSManagedObject"]
         || [entityClassName isEqualToString:@""]
         || [entityClassName isEqualToString:gCustomBaseClass]);
@@ -188,7 +196,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     if (!forcedBaseClass) {
         NSEntityDescription *superentity = [self superentity];
         if (superentity) {
-            return [superentity managedObjectClassName];
+            return superentity.generatedObjectClassName;
         } else {
             return gCustomBaseClass ? gCustomBaseClass : @"NSManagedObject";
         }
@@ -217,6 +225,25 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     return [[self userInfo] objectForKey:kAdditionalHeaderFileNameKey];
 }
 
+- (NSString*)generatedObjectClassName {
+    NSString *className;
+    if (gPonsoPrefix) {
+        NSString *entityName = self.name;
+        if ([gPonsoPrefix isEqualToString:@"-"]) {
+            className = entityName;
+        } else {
+            className = [NSString stringWithFormat:@"%@%@%@",
+                         gPonsoPrefix,
+                         [entityName firstLetter].capitalizedString,
+                         [entityName substringFromIndex:1]];
+        }
+    } else {
+        className = [self managedObjectClassName];
+    }
+    
+    return className;
+}
+
 /** @TypeInfo NSAttributeDescription */
 - (NSArray*)noninheritedAttributesSansType {
     NSArray *attributeDescriptions = [self noninheritedAttributes];
@@ -226,7 +253,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     {
         if ([[attributeDescription name] isEqualToString:@"type"]) {
             ddprintf(@"WARNING skipping 'type' attribute on %@ (%@) - see https://github.com/rentzsch/mogenerator/issues/74\n",
-                     self.name, self.managedObjectClassName);
+                     self.name, self.generatedObjectClassName);
         } else {
             [filteredAttributeDescriptions addObject:attributeDescription];
         }
@@ -316,7 +343,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
         assert(property);
     }
 
-    return [entity managedObjectClassName];
+    return entity.generatedObjectClassName;
 }
 
 // auxiliary function
@@ -643,6 +670,11 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     }
 }
 
+- (BOOL)notInPONSODictionary {
+    NSString *notInPONSODictionaryUserinfoValue = [[self userInfo] objectForKey:@"notInPONSODictionary"];
+    return (notInPONSODictionaryUserinfoValue != nil);
+}
+
 @end
 
 @implementation NSString (camelCaseString)
@@ -761,6 +793,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         {@"machine-dir",        'M',   DDGetoptRequiredArgument},
         {@"human-dir",          'H',   DDGetoptRequiredArgument},
         {@"template-group",     0,     DDGetoptRequiredArgument},
+        {@"ponso-prefix",       0,     DDGetoptRequiredArgument},
         {@"list-source-files",  0,     DDGetoptNoArgument},
         {@"orphaned",           0,     DDGetoptNoArgument},
 
@@ -808,6 +841,11 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
            "                          human and machine generated source files\n"
            "--includeh FILE           Generate aggregate include file for .h files for human\n"
            "                          generated source files only\n"
+           "--ponso-prefix PREFIX     Ignore custom class names in model, instead prepending\n"
+           "                          the entityName (with the first character capitalized)\n"
+           "                          with the given prefix. Specify a PREFIX of - to just\n"
+           "                          use the bare entityName as the custom class name.\n"
+           "                          Intended for use only with PONSO templates.\n"
            "--template-path PATH      Path to templates (absolute or relative to model path)\n"
            "--template-group NAME     Name of template group\n"
            "--template-var KEY=VALUE  A key-value pair to pass to the template file. There\n"
@@ -1071,7 +1109,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
 
         for (NSEntityDescription *entity in entitiesWithCustomSubclass)
         {
-            [entityFilesByName removeObjectForKey:[entity managedObjectClassName]];
+            [entityFilesByName removeObjectForKey:entity.generatedObjectClassName];
         }
 
         for (NSSet *orphanedFiles in entityFilesByName)
@@ -1105,6 +1143,10 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         if ([fm fileExistsAtPath:absoluteTemplatePath]) {
             templatePath = absoluteTemplatePath;
         }
+    }
+
+    if (ponsoPrefix) {
+        gPonsoPrefix = [ponsoPrefix retain];
     }
 
     int machineFilesGenerated = 0;
@@ -1160,7 +1202,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
             generatedHumanH = [generatedHumanH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedHumanM = [generatedHumanM stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
 
-            NSString *entityClassName = [entity managedObjectClassName];
+            NSString *entityClassName = entity.generatedObjectClassName;
             entityClassName = [entityClassName stringByReplacingOccurrencesOfString:@"." withString:@"_"];
             BOOL machineDirtied = NO;
 

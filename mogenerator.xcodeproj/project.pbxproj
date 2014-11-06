@@ -396,6 +396,7 @@
 				7956A85B152E4A500081B5CA /* ShellScript */,
 				8DD76F990486AA7600D96B5E /* Sources */,
 				8DD76F9B0486AA7600D96B5E /* Frameworks */,
+				6082442F1A04452200232E1A /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -432,6 +433,19 @@
 /* End PBXProject section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		6082442F1A04452200232E1A /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "OUTPUT_DIR=\"${HOME}/bin\"\nmkdir -p \"${OUTPUT_DIR}\"\ncp -a -f \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}\" \"${OUTPUT_DIR}\"";
+		};
 		7956A85B152E4A500081B5CA /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

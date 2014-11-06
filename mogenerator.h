@@ -25,6 +25,7 @@
 - (NSString*)customSuperentity;
 - (NSString*)forcedCustomBaseClass;
 - (NSString*)additionalHeaderFileName;
+- (NSString*)generatedObjectClassName;
 - (void)_processPredicate:(NSPredicate*)predicate_ bindings:(NSMutableArray*)bindings_;
 - (NSArray*)prettyFetchRequests;
 @end
@@ -74,6 +75,7 @@
     NSString              *machineDir;
     NSString              *humanDir;
     NSString              *templateGroup;
+    NSString              *ponsoPrefix;
     BOOL                  _help;
     BOOL                  _version;
     BOOL                  _listSourceFiles;
