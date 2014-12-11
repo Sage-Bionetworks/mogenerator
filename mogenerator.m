@@ -231,6 +231,8 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
         NSString *entityName = self.name;
         if ([gPonsoPrefix isEqualToString:@"-"]) {
             className = entityName;
+        } else if (self.userInfo[@"notInPONSOClasses"]) {
+            className = @"";
         } else {
             className = [NSString stringWithFormat:@"%@%@%@",
                          gPonsoPrefix,
@@ -420,6 +422,21 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
                            nil]];
     }
     return result;
+}
+@end
+
+@implementation NSEntityDescription (internalHeaderAdditions)
+- (BOOL)needsInternalHeader
+{
+    BOOL needs = NO;
+    NSArray *attrs = [self noninheritedAttributes];
+    for (NSAttributeDescription *attr in attrs) {
+        if ((needs = (attr.userInfo[@"notInPONSODictionary"]))) {
+            break;
+        }
+    }
+    
+    return needs;
 }
 @end
 
@@ -668,11 +685,6 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     } else {
         return NO;
     }
-}
-
-- (BOOL)notInPONSODictionary {
-    NSString *notInPONSODictionaryUserinfoValue = [[self userInfo] objectForKey:@"notInPONSODictionary"];
-    return (notInPONSODictionaryUserinfoValue != nil);
 }
 
 @end
@@ -1154,8 +1166,10 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
 
     if (model) {
         MiscMergeEngine *machineH = nil;
+        MiscMergeEngine *machineIH = nil;
         MiscMergeEngine *machineM = nil;
         MiscMergeEngine *humanH = nil;
+        MiscMergeEngine *humanIH = nil;
         MiscMergeEngine *humanM = nil;
 
         if (_swift) {
@@ -1166,31 +1180,45 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         } else {
             machineH = engineWithTemplateDesc([self templateDescNamed:@"machine.h.motemplate"]);
             assert(machineH);
+            machineIH = engineWithTemplateDesc([self templateDescNamed:@"machine.ih.motemplate"]);
             machineM = engineWithTemplateDesc([self templateDescNamed:@"machine.m.motemplate"]);
             assert(machineM);
             humanH = engineWithTemplateDesc([self templateDescNamed:@"human.h.motemplate"]);
             assert(humanH);
+            humanIH = engineWithTemplateDesc([self templateDescNamed:@"human.ih.motemplate"]);
             humanM = engineWithTemplateDesc([self templateDescNamed:@"human.m.motemplate"]);
             assert(humanM);
         }
 
         // Add the template var dictionary to each of the merge engines
         [machineH setEngineValue:templateVar forKey:kTemplateVar];
+        [machineIH setEngineValue:templateVar forKey:kTemplateVar];
         [machineM setEngineValue:templateVar forKey:kTemplateVar];
         [humanH setEngineValue:templateVar forKey:kTemplateVar];
+        [humanIH setEngineValue:templateVar forKey:kTemplateVar];
         [humanM setEngineValue:templateVar forKey:kTemplateVar];
 
         NSMutableArray  *humanMFiles = [NSMutableArray array],
+                        *humanIHFiles = [NSMutableArray array],
                         *humanHFiles = [NSMutableArray array],
                         *machineMFiles = [NSMutableArray array],
+                        *machineIHFiles = [NSMutableArray array],
                         *machineHFiles = [NSMutableArray array];
 
         NSArray *entitiesWithCustomSubclass = [model entitiesWithACustomSubclassInConfiguration:configuration verbose:YES];
         for (NSEntityDescription *entity in entitiesWithCustomSubclass)
         {
             NSString *generatedMachineH = [machineH executeWithObject:entity sender:nil];
+            NSString *generatedMachineIH = nil;
+            if (entity.needsInternalHeader) {
+                generatedMachineIH = [machineIH executeWithObject:entity sender:nil];
+            }
             NSString *generatedMachineM = [machineM executeWithObject:entity sender:nil];
             NSString *generatedHumanH = [humanH executeWithObject:entity sender:nil];
+            NSString *generatedHumanIH = nil;
+            if (entity.needsInternalHeader) {
+                generatedHumanIH = [humanIH executeWithObject:entity sender:nil];
+            }
             NSString *generatedHumanM = [humanM executeWithObject:entity sender:nil];
 
             // remove unnecessary empty lines
@@ -1198,8 +1226,10 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
             NSString *replacementString = @"\n\n";
 
             generatedMachineH = [generatedMachineH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
+            generatedMachineIH = [generatedMachineIH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedMachineM = [generatedMachineM stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedHumanH = [generatedHumanH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
+            generatedHumanIH = [generatedHumanIH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedHumanM = [generatedHumanM stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
 
             NSString *entityClassName = entity.generatedObjectClassName;
@@ -1218,6 +1248,22 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
                     [generatedMachineH writeToFile:machineHFileName atomically:NO encoding:NSUTF8StringEncoding error:nil];
                     machineDirtied = YES;
                     machineFilesGenerated++;
+                }
+            }
+
+            if (generatedMachineIH) {
+                // Machine internal header files.
+                NSString *machineIHFileName = [machineDir stringByAppendingPathComponent:
+                                               [NSString stringWithFormat:@"_%@Internal.%@", entityClassName, extension]];
+                if (_listSourceFiles) {
+                    [machineIHFiles addObject:machineIHFileName];
+                } else {
+                    if (![fm regularFileExistsAtPath:machineIHFileName] || ![generatedMachineIH isEqualToString:[NSString stringWithContentsOfFile:machineIHFileName encoding:NSUTF8StringEncoding error:nil]]) {
+                        //  If the file doesn't exist or is different than what we just generated, write it out.
+                        [generatedMachineIH writeToFile:machineIHFileName atomically:NO encoding:NSUTF8StringEncoding error:nil];
+                        machineDirtied = YES;
+                        machineFilesGenerated++;
+                    }
                 }
             }
 
@@ -1253,6 +1299,23 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
                 }
             }
 
+            if (generatedHumanIH) {
+                // Human internal header files.
+                NSString *humanIHFileName = [humanDir stringByAppendingPathComponent:
+                                            [NSString stringWithFormat:@"%@Internal.%@", entityClassName, extension]];
+                if (_listSourceFiles) {
+                    [humanIHFiles addObject:humanIHFileName];
+                } else {
+                    if ([fm regularFileExistsAtPath:humanIHFileName]) {
+                        if (machineDirtied)
+                            [fm touchPath:humanIHFileName];
+                    } else {
+                        [generatedHumanIH writeToFile:humanIHFileName atomically:NO encoding:NSUTF8StringEncoding error:nil];
+                        humanFilesGenerated++;
+                    }
+                }
+            }
+
             if (!_swift) {
                 //  Human source files.
                 NSString *humanMFileName = [humanDir stringByAppendingPathComponent:
@@ -1282,7 +1345,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         }
 
         if (_listSourceFiles) {
-            NSArray *filesList = [NSArray arrayWithObjects:humanMFiles, humanHFiles, machineMFiles, machineHFiles, nil];
+            NSArray *filesList = [NSArray arrayWithObjects:humanMFiles, humanIHFiles, humanHFiles, machineMFiles, machineIHFiles, machineHFiles, nil];
 
             for (NSArray *files in filesList)
             {

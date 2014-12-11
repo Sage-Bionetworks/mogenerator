@@ -30,6 +30,10 @@
 - (NSArray*)prettyFetchRequests;
 @end
 
+@interface NSEntityDescription (internalHeaderAdditions)
+- (BOOL)needsInternalHeader;
+@end
+
 @interface NSAttributeDescription (typing)
 - (BOOL)hasScalarAttributeType;
 - (BOOL)usesScalarAttributeType;
