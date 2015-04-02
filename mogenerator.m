@@ -209,6 +209,11 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     return userInfoCustomBaseClass ? userInfoCustomBaseClass : gCustomBaseClassForced;
 }
 /** @TypeInfo NSAttributeDescription */
+- (NSArray*)allAttributes {
+    NSArray *sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]];
+    return [[[self attributesByName] allValues] sortedArrayUsingDescriptors:sortDescriptors];
+}
+
 - (NSArray*)noninheritedAttributes {
     NSArray *sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]];
     NSEntityDescription *superentity = [self superentity];
@@ -263,6 +268,11 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     return filteredAttributeDescriptions;
 }
 /** @TypeInfo NSAttributeDescription */
+- (NSArray*)allRelationships {
+    NSArray *sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]];
+    return [[[self relationshipsByName] allValues] sortedArrayUsingDescriptors:sortDescriptors];
+}
+
 - (NSArray*)noninheritedRelationships {
     NSArray *sortDescriptors = [NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:@"name" ascending:YES]];
     NSEntityDescription *superentity = [self superentity];
