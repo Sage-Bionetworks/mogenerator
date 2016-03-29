@@ -633,7 +633,15 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     if ([result isEqualToString:@"Class"]) {
         // `Class` (don't append asterisk).
     } else if ([result rangeOfString:@"<"].location != NSNotFound) {
-        // `id<Protocol1,Protocol2>` (don't append asterisk).
+        NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <,"];
+        NSArray *tokens = [result componentsSeparatedByCharactersInSet:removeCharSet];
+        NSString *mainType = [tokens firstObject];
+        if ([mainType isEqualToString:@"id"]) {
+            // `id<Protocol1,Protocol2>` (don't append asterisk).
+        } else {
+            // e.g. 'NSArray<containedItemType>' (do append asterisk).
+            result = [result stringByAppendingString:@"*"];
+        }
     } else if ([result isEqualToString:@"NSObject"]) {
         result = gSwift ? @"AnyObject" : @"id";
     } else if (!gSwift) {
@@ -659,6 +667,20 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
 
 - (BOOL)hasBinaryDataAttributeType {
   return ([self attributeType] == NSBinaryDataAttributeType);
+}
+
+- (BOOL)hasSetAttributeType {
+    if ([self hasTransformableAttributeType]) {
+        NSString *className = [self objectAttributeClassName];
+        if ([className rangeOfString:@"<"].location != NSNotFound) {
+            NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <"];
+            NSArray *tokens = [className componentsSeparatedByCharactersInSet:removeCharSet];
+            className = [tokens firstObject];
+        }
+        Class attributeClass = NSClassFromString(className);
+        return [attributeClass isSubclassOfClass:[NSSet class]];
+    }
+    return NO;
 }
 
 @end

@@ -49,6 +49,7 @@
 - (BOOL)isReadonly;
 - (BOOL)hasDateAttributeType;
 - (BOOL)hasBinaryDataAttributeType;
+- (BOOL)hasSetAttributeType;
 @end
 
 @interface NSRelationshipDescription (collectionClassName)
