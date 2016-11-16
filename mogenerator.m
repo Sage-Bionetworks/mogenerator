@@ -683,6 +683,37 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     return NO;
 }
 
+- (BOOL)hasJSONAttributeType {
+    if ([self hasTransformableAttributeType]) {
+        NSString *className = [self objectAttributeClassName];
+        if ([className rangeOfString:@"<"].location != NSNotFound) {
+            NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <"];
+            NSArray *tokens = [className componentsSeparatedByCharactersInSet:removeCharSet];
+            className = [tokens firstObject];
+        }
+        Class attributeClass = NSClassFromString(className);
+        BOOL isJSONClass = ([attributeClass isSubclassOfClass:[NSDictionary class]] ||
+                            [attributeClass isSubclassOfClass:[NSArray class]]);
+        return isJSONClass;
+    }
+    return NO;
+}
+
+- (BOOL)hasIdAttributeType {
+    if ([self hasTransformableAttributeType]) {
+        NSString *className = [self objectAttributeClassName];
+        if ([className rangeOfString:@"<"].location != NSNotFound) {
+            NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <"];
+            NSArray *tokens = [className componentsSeparatedByCharactersInSet:removeCharSet];
+            className = [tokens firstObject];
+        }
+        BOOL isId = ([className isEqualToString:@"id"] ||
+                     [className isEqualToString:@"NSObject"]);
+        return isId;
+    }
+    return NO;
+}
+
 @end
 
 @implementation NSRelationshipDescription (collectionClassName)
