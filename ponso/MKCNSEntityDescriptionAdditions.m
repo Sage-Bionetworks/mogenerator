@@ -49,7 +49,7 @@
     if([relationship isTransient])
         return NO;
     
-    return YES;
+    return  ![relationship.userInfo valueForKey:@"notInPONSODictionary"];
 }
 
 @end

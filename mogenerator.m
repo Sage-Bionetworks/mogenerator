@@ -12,6 +12,7 @@ static NSString * const kTemplateVar = @"TemplateVar";
 static NSString  *gCustomBaseClass;
 static NSString  *gCustomBaseClassImport;
 static NSString  *gCustomBaseClassForced;
+static NSString  *gPonsoPrefix;
 static BOOL       gSwift;
 
 static const NSString *const kAttributeValueScalarTypeKey = @"attributeValueScalarType";
@@ -117,7 +118,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
 
     for (NSEntityDescription *entity in allEntities)
     {
-        NSString *entityClassName = [entity managedObjectClassName];
+        NSString *entityClassName = entity.generatedObjectClassName;
 
         if ([entity hasCustomClass]){
             [result addObject:entity];
@@ -129,7 +130,14 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
         }
     }
 
-    return [result sortedArrayUsingDescriptors:[NSArray arrayWithObject:[[[NSSortDescriptor alloc] initWithKey:@"managedObjectClassName"
+    NSString *sortKey;
+    if (gPonsoPrefix) {
+        sortKey = @"name";
+    } else {
+        sortKey = @"managedObjectClassName";
+    }
+
+    return [result sortedArrayUsingDescriptors:[NSArray arrayWithObject:[[[NSSortDescriptor alloc] initWithKey:sortKey
                                                                                                      ascending:YES] autorelease]]];
 }
 @end
@@ -144,7 +152,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
 }
 
 - (BOOL)hasCustomClass {
-    NSString *entityClassName = [self managedObjectClassName];
+    NSString *entityClassName = self.generatedObjectClassName;
     BOOL result = !([entityClassName isEqualToString:@"NSManagedObject"]
         || [entityClassName isEqualToString:@""]
         || [entityClassName isEqualToString:gCustomBaseClass]);
@@ -188,7 +196,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     if (!forcedBaseClass) {
         NSEntityDescription *superentity = [self superentity];
         if (superentity) {
-            return [superentity managedObjectClassName];
+            return superentity.generatedObjectClassName;
         } else {
             return gCustomBaseClass ? gCustomBaseClass : @"NSManagedObject";
         }
@@ -222,6 +230,27 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     return [[self userInfo] objectForKey:kAdditionalHeaderFileNameKey];
 }
 
+- (NSString*)generatedObjectClassName {
+    NSString *className;
+    if (gPonsoPrefix) {
+        NSString *entityName = self.name;
+        if ([gPonsoPrefix isEqualToString:@"-"]) {
+            className = entityName;
+        } else if (self.userInfo[@"notInPONSOClasses"]) {
+            className = @"";
+        } else {
+            className = [NSString stringWithFormat:@"%@%@%@",
+                         gPonsoPrefix,
+                         [entityName firstLetter].capitalizedString,
+                         [entityName substringFromIndex:1]];
+        }
+    } else {
+        className = [self managedObjectClassName];
+    }
+    
+    return className;
+}
+
 /** @TypeInfo NSAttributeDescription */
 - (NSArray*)noninheritedAttributesSansType {
     NSArray *attributeDescriptions = [self noninheritedAttributes];
@@ -231,7 +260,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     {
         if ([[attributeDescription name] isEqualToString:@"type"]) {
             ddprintf(@"WARNING skipping 'type' attribute on %@ (%@) - see https://github.com/rentzsch/mogenerator/issues/74\n",
-                     self.name, self.managedObjectClassName);
+                     self.name, self.generatedObjectClassName);
         } else {
             [filteredAttributeDescriptions addObject:attributeDescription];
         }
@@ -326,7 +355,7 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
         assert(property);
     }
 
-    return [entity managedObjectClassName];
+    return entity.generatedObjectClassName;
 }
 
 // auxiliary function
@@ -403,6 +432,21 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
                            nil]];
     }
     return result;
+}
+@end
+
+@implementation NSEntityDescription (internalHeaderAdditions)
+- (BOOL)needsInternalHeader
+{
+    BOOL needs = NO;
+    NSArray *attrs = [self noninheritedAttributes];
+    for (NSAttributeDescription *attr in attrs) {
+        if ((needs = (attr.userInfo[@"notInPONSODictionary"]))) {
+            break;
+        }
+    }
+    
+    return needs;
 }
 @end
 
@@ -589,7 +633,15 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     if ([result isEqualToString:@"Class"]) {
         // `Class` (don't append asterisk).
     } else if ([result rangeOfString:@"<"].location != NSNotFound) {
-        // `id<Protocol1,Protocol2>` (don't append asterisk).
+        NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <,"];
+        NSArray *tokens = [result componentsSeparatedByCharactersInSet:removeCharSet];
+        NSString *mainType = [tokens firstObject];
+        if ([mainType isEqualToString:@"id"]) {
+            // `id<Protocol1,Protocol2>` (don't append asterisk).
+        } else {
+            // e.g. 'NSArray<containedItemType>' (do append asterisk).
+            result = [result stringByAppendingString:@"*"];
+        }
     } else if ([result isEqualToString:@"NSObject"]) {
         result = gSwift ? @"AnyObject" : @"id";
     } else if (!gSwift) {
@@ -605,6 +657,59 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
     NSString *readonlyUserinfoValue = [[self userInfo] objectForKey:kReadOnly];
     if (readonlyUserinfoValue != nil) {
         return YES;
+    }
+    return NO;
+}
+
+- (BOOL)hasDateAttributeType {
+  return ([self attributeType] == NSDateAttributeType);
+}
+
+- (BOOL)hasBinaryDataAttributeType {
+  return ([self attributeType] == NSBinaryDataAttributeType);
+}
+
+- (BOOL)hasSetAttributeType {
+    if ([self hasTransformableAttributeType]) {
+        NSString *className = [self objectAttributeClassName];
+        if ([className rangeOfString:@"<"].location != NSNotFound) {
+            NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <"];
+            NSArray *tokens = [className componentsSeparatedByCharactersInSet:removeCharSet];
+            className = [tokens firstObject];
+        }
+        Class attributeClass = NSClassFromString(className);
+        return [attributeClass isSubclassOfClass:[NSSet class]];
+    }
+    return NO;
+}
+
+- (BOOL)hasJSONAttributeType {
+    if ([self hasTransformableAttributeType]) {
+        NSString *className = [self objectAttributeClassName];
+        if ([className rangeOfString:@"<"].location != NSNotFound) {
+            NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <"];
+            NSArray *tokens = [className componentsSeparatedByCharactersInSet:removeCharSet];
+            className = [tokens firstObject];
+        }
+        Class attributeClass = NSClassFromString(className);
+        BOOL isJSONClass = ([attributeClass isSubclassOfClass:[NSDictionary class]] ||
+                            [attributeClass isSubclassOfClass:[NSArray class]]);
+        return isJSONClass;
+    }
+    return NO;
+}
+
+- (BOOL)hasIdAttributeType {
+    if ([self hasTransformableAttributeType]) {
+        NSString *className = [self objectAttributeClassName];
+        if ([className rangeOfString:@"<"].location != NSNotFound) {
+            NSCharacterSet *removeCharSet = [NSCharacterSet characterSetWithCharactersInString:@" <"];
+            NSArray *tokens = [className componentsSeparatedByCharactersInSet:removeCharSet];
+            className = [tokens firstObject];
+        }
+        BOOL isId = ([className isEqualToString:@"id"] ||
+                     [className isEqualToString:@"NSObject"]);
+        return isId;
     }
     return NO;
 }
@@ -763,6 +868,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         {@"machine-dir",        'M',   DDGetoptRequiredArgument},
         {@"human-dir",          'H',   DDGetoptRequiredArgument},
         {@"template-group",     0,     DDGetoptRequiredArgument},
+        {@"ponso-prefix",       0,     DDGetoptRequiredArgument},
         {@"list-source-files",  0,     DDGetoptNoArgument},
         {@"orphaned",           0,     DDGetoptNoArgument},
 
@@ -810,6 +916,11 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
            "                          human and machine generated source files\n"
            "--includeh FILE           Generate aggregate include file for .h files for human\n"
            "                          generated source files only\n"
+           "--ponso-prefix PREFIX     Ignore custom class names in model, instead prepending\n"
+           "                          the entityName (with the first character capitalized)\n"
+           "                          with the given prefix. Specify a PREFIX of - to just\n"
+           "                          use the bare entityName as the custom class name.\n"
+           "                          Intended for use only with PONSO templates.\n"
            "--template-path PATH      Path to templates (absolute or relative to model path)\n"
            "--template-group NAME     Name of template group\n"
            "--template-var KEY=VALUE  A key-value pair to pass to the template file. There\n"
@@ -1073,7 +1184,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
 
         for (NSEntityDescription *entity in entitiesWithCustomSubclass)
         {
-            [entityFilesByName removeObjectForKey:[entity managedObjectClassName]];
+            [entityFilesByName removeObjectForKey:entity.generatedObjectClassName];
         }
 
         for (NSSet *orphanedFiles in entityFilesByName)
@@ -1109,13 +1220,19 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         }
     }
 
+    if (ponsoPrefix) {
+        gPonsoPrefix = [ponsoPrefix retain];
+    }
+
     int machineFilesGenerated = 0;
     int humanFilesGenerated = 0;
 
     if (model) {
         MiscMergeEngine *machineH = nil;
+        MiscMergeEngine *machineIH = nil;
         MiscMergeEngine *machineM = nil;
         MiscMergeEngine *humanH = nil;
+        MiscMergeEngine *humanIH = nil;
         MiscMergeEngine *humanM = nil;
 
         if (_swift) {
@@ -1126,31 +1243,45 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         } else {
             machineH = engineWithTemplateDesc([self templateDescNamed:@"machine.h.motemplate"]);
             assert(machineH);
+            machineIH = engineWithTemplateDesc([self templateDescNamed:@"machine.ih.motemplate"]);
             machineM = engineWithTemplateDesc([self templateDescNamed:@"machine.m.motemplate"]);
             assert(machineM);
             humanH = engineWithTemplateDesc([self templateDescNamed:@"human.h.motemplate"]);
             assert(humanH);
+            humanIH = engineWithTemplateDesc([self templateDescNamed:@"human.ih.motemplate"]);
             humanM = engineWithTemplateDesc([self templateDescNamed:@"human.m.motemplate"]);
             assert(humanM);
         }
 
         // Add the template var dictionary to each of the merge engines
         [machineH setEngineValue:templateVar forKey:kTemplateVar];
+        [machineIH setEngineValue:templateVar forKey:kTemplateVar];
         [machineM setEngineValue:templateVar forKey:kTemplateVar];
         [humanH setEngineValue:templateVar forKey:kTemplateVar];
+        [humanIH setEngineValue:templateVar forKey:kTemplateVar];
         [humanM setEngineValue:templateVar forKey:kTemplateVar];
 
         NSMutableArray  *humanMFiles = [NSMutableArray array],
+                        *humanIHFiles = [NSMutableArray array],
                         *humanHFiles = [NSMutableArray array],
                         *machineMFiles = [NSMutableArray array],
+                        *machineIHFiles = [NSMutableArray array],
                         *machineHFiles = [NSMutableArray array];
 
         NSArray *entitiesWithCustomSubclass = [model entitiesWithACustomSubclassInConfiguration:configuration verbose:YES];
         for (NSEntityDescription *entity in entitiesWithCustomSubclass)
         {
             NSString *generatedMachineH = [machineH executeWithObject:entity sender:nil];
+            NSString *generatedMachineIH = nil;
+            if (entity.needsInternalHeader) {
+                generatedMachineIH = [machineIH executeWithObject:entity sender:nil];
+            }
             NSString *generatedMachineM = [machineM executeWithObject:entity sender:nil];
             NSString *generatedHumanH = [humanH executeWithObject:entity sender:nil];
+            NSString *generatedHumanIH = nil;
+            if (entity.needsInternalHeader) {
+                generatedHumanIH = [humanIH executeWithObject:entity sender:nil];
+            }
             NSString *generatedHumanM = [humanM executeWithObject:entity sender:nil];
 
             // remove unnecessary empty lines
@@ -1158,11 +1289,13 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
             NSString *replacementString = @"\n\n";
 
             generatedMachineH = [generatedMachineH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
+            generatedMachineIH = [generatedMachineIH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedMachineM = [generatedMachineM stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedHumanH = [generatedHumanH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
+            generatedHumanIH = [generatedHumanIH stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
             generatedHumanM = [generatedHumanM stringByReplacingOccurrencesOfRegex:searchPattern withString:replacementString];
 
-            NSString *entityClassName = [entity managedObjectClassName];
+            NSString *entityClassName = entity.generatedObjectClassName;
             entityClassName = [entityClassName stringByReplacingOccurrencesOfString:@"." withString:@"_"];
             BOOL machineDirtied = NO;
 
@@ -1178,6 +1311,22 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
                     [generatedMachineH writeToFile:machineHFileName atomically:NO encoding:NSUTF8StringEncoding error:nil];
                     machineDirtied = YES;
                     machineFilesGenerated++;
+                }
+            }
+
+            if (generatedMachineIH) {
+                // Machine internal header files.
+                NSString *machineIHFileName = [machineDir stringByAppendingPathComponent:
+                                               [NSString stringWithFormat:@"_%@Internal.%@", entityClassName, extension]];
+                if (_listSourceFiles) {
+                    [machineIHFiles addObject:machineIHFileName];
+                } else {
+                    if (![fm regularFileExistsAtPath:machineIHFileName] || ![generatedMachineIH isEqualToString:[NSString stringWithContentsOfFile:machineIHFileName encoding:NSUTF8StringEncoding error:nil]]) {
+                        //  If the file doesn't exist or is different than what we just generated, write it out.
+                        [generatedMachineIH writeToFile:machineIHFileName atomically:NO encoding:NSUTF8StringEncoding error:nil];
+                        machineDirtied = YES;
+                        machineFilesGenerated++;
+                    }
                 }
             }
 
@@ -1213,6 +1362,23 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
                 }
             }
 
+            if (generatedHumanIH) {
+                // Human internal header files.
+                NSString *humanIHFileName = [humanDir stringByAppendingPathComponent:
+                                            [NSString stringWithFormat:@"%@Internal.%@", entityClassName, extension]];
+                if (_listSourceFiles) {
+                    [humanIHFiles addObject:humanIHFileName];
+                } else {
+                    if ([fm regularFileExistsAtPath:humanIHFileName]) {
+                        if (machineDirtied)
+                            [fm touchPath:humanIHFileName];
+                    } else {
+                        [generatedHumanIH writeToFile:humanIHFileName atomically:NO encoding:NSUTF8StringEncoding error:nil];
+                        humanFilesGenerated++;
+                    }
+                }
+            }
+
             if (!_swift) {
                 //  Human source files.
                 NSString *humanMFileName = [humanDir stringByAppendingPathComponent:
@@ -1242,7 +1408,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         }
 
         if (_listSourceFiles) {
-            NSArray *filesList = [NSArray arrayWithObjects:humanMFiles, humanHFiles, machineMFiles, machineHFiles, nil];
+            NSArray *filesList = [NSArray arrayWithObjects:humanMFiles, humanIHFiles, humanHFiles, machineMFiles, machineIHFiles, machineHFiles, nil];
 
             for (NSArray *files in filesList)
             {

@@ -25,8 +25,13 @@
 - (NSString*)customSuperentity;
 - (NSString*)forcedCustomBaseClass;
 - (NSString*)additionalHeaderFileName;
+- (NSString*)generatedObjectClassName;
 - (void)_processPredicate:(NSPredicate*)predicate_ bindings:(NSMutableArray*)bindings_;
 - (NSArray*)prettyFetchRequests;
+@end
+
+@interface NSEntityDescription (internalHeaderAdditions)
+- (BOOL)needsInternalHeader;
 @end
 
 @interface NSAttributeDescription (typing)
@@ -42,6 +47,9 @@
 - (NSString*)objectAttributeType;
 - (BOOL)hasTransformableAttributeType;
 - (BOOL)isReadonly;
+- (BOOL)hasDateAttributeType;
+- (BOOL)hasBinaryDataAttributeType;
+- (BOOL)hasSetAttributeType;
 @end
 
 @interface NSRelationshipDescription (collectionClassName)
@@ -72,6 +80,7 @@
     NSString              *machineDir;
     NSString              *humanDir;
     NSString              *templateGroup;
+    NSString              *ponsoPrefix;
     BOOL                  _help;
     BOOL                  _version;
     BOOL                  _listSourceFiles;

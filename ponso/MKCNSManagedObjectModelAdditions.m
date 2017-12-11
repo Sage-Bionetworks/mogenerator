@@ -32,7 +32,7 @@
 		return NO;
 	}
 	
-	return ![relationship isTransient];
+	return ![relationship isTransient] && ![relationship.userInfo valueForKey:@"notInPONSODictionary"];
 }
 
 @end
