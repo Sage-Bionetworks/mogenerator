@@ -421,6 +421,7 @@
 			developmentRegion = English;
 			hasScannedForEncodings = 1;
 			knownRegions = (
+				English,
 				en,
 			);
 			mainGroup = 08FB7794FE84155DC02AAC07 /* mogenerator */;
@@ -444,7 +445,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "OUTPUT_DIR=\"${HOME}/bin\"\nmkdir -p \"${OUTPUT_DIR}\"\ncp -a -f \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}\" \"${OUTPUT_DIR}\"";
+			shellScript = "OUTPUT_DIR=\"${HOME}/bin\"\nmkdir -p \"${OUTPUT_DIR}\"\ncp -a -f \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}\" \"${OUTPUT_DIR}\"\n";
 		};
 		7956A85B152E4A500081B5CA /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;

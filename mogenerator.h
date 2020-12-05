@@ -75,6 +75,7 @@
     NSString              *baseClassForce;
     NSString              *includem;
     NSString              *includeh;
+    NSString              *moduleName;
     NSString              *templatePath;
     NSString              *outputDir;
     NSString              *machineDir;

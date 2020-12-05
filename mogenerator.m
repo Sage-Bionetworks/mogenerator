@@ -13,6 +13,7 @@ static NSString  *gCustomBaseClass;
 static NSString  *gCustomBaseClassImport;
 static NSString  *gCustomBaseClassForced;
 static NSString  *gPonsoPrefix;
+static NSString  *gModuleName;
 static BOOL       gSwift;
 
 static const NSString *const kAttributeValueScalarTypeKey = @"attributeValueScalarType";
@@ -228,6 +229,14 @@ static const NSString *const kReadOnly = @"mogenerator.readonly";
 
 - (NSString*)additionalHeaderFileName {
     return [[self userInfo] objectForKey:kAdditionalHeaderFileNameKey];
+}
+
+- (BOOL)hasModuleName {
+    return gModuleName != nil;
+}
+
+- (NSString*)moduleName {
+    return gModuleName;
 }
 
 - (NSString*)generatedObjectClassName {
@@ -861,6 +870,7 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
         {@"baseClass",          0,     DDGetoptRequiredArgument},
         {@"includem",           0,     DDGetoptRequiredArgument},
         {@"includeh",           0,     DDGetoptRequiredArgument},
+        {@"module-name",        0,     DDGetoptRequiredArgument},
         {@"template-path",      0,     DDGetoptRequiredArgument},
         // For compatibility:
         {@"templatePath",       0,     DDGetoptRequiredArgument},
@@ -916,6 +926,8 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
            "                          human and machine generated source files\n"
            "--includeh FILE           Generate aggregate include file for .h files for human\n"
            "                          generated source files only\n"
+           "--module-name NAME        Generate headers suitable for a module target, e.g.\n"
+           "                          <ModuleName/header.h> instead of just \"header.h\"\n"
            "--ponso-prefix PREFIX     Ignore custom class names in model, instead prepending\n"
            "                          the entityName (with the first character capitalized)\n"
            "                          with the given prefix. Specify a PREFIX of - to just\n"
@@ -1223,6 +1235,10 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
     if (ponsoPrefix) {
         gPonsoPrefix = [ponsoPrefix retain];
     }
+    
+    if (moduleName) {
+        gModuleName = [moduleName retain];
+    }
 
     int machineFilesGenerated = 0;
     int humanFilesGenerated = 0;
@@ -1403,7 +1419,11 @@ NSString *ApplicationSupportSubdirectoryName = @"mogenerator";
 
                 [mfileContent appendFormat:@"#import \"%@\"\n#import \"%@\"\n",
                     [humanMFileName lastPathComponent], [machineMFileName lastPathComponent]];
-                [hfileContent appendFormat:@"#import \"%@\"\n", [humanHFileName lastPathComponent]];
+                if (moduleName) {
+                    [hfileContent appendFormat:@"#import <%@/%@>\n", moduleName, [humanHFileName lastPathComponent]];
+                } else {
+                    [hfileContent appendFormat:@"#import \"%@\"\n", [humanHFileName lastPathComponent]];
+                }
             }
         }
 
